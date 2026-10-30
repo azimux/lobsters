@@ -1,7 +1,9 @@
 module StoryFinder
   extend ActiveSupport::Concern
 
-  def find_story
+  def current_story
+    return @story if defined?(@story)
+
     story = Story.find_by(short_id: params[:story_id] || params[:id])
     # convenience to use PK (from external queries) without generally permitting enumeration:
     story ||= Story.find(params[:id]) if @user&.is_admin?
@@ -14,13 +16,14 @@ module StoryFinder
       ).try(:vote)
     end
 
-    story
+    @story = story
   end
 
-  def find_story!
-    @story = find_story
-    if !@story
-      raise ActiveRecord::RecordNotFound
-    end
+  def current_story_missing?
+    current_story.nil? || current_story.is_gone?
+  end
+
+  def require_story_exists
+    raise ActiveRecord::RecordNotFound unless current_story
   end
 end

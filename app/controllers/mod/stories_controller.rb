@@ -1,7 +1,7 @@
 class Mod::StoriesController < Mod::ModController
   include StoryFinder
 
-  before_action :find_story!
+  before_action :require_story_exists
   before_action :show_title_h1
   after_action only: [:destroy, :undelete, :update] do
     refill_story_page_cache @story, is_moderator: true

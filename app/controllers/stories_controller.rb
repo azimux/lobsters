@@ -244,19 +244,19 @@ class StoriesController < ApplicationController
   end
 
   def unvote
-    if !(@story = find_story) || @story.is_gone?
+    if current_story_missing?
       return render plain: "can't find story", status: 400
     end
 
     Vote.vote_thusly_on_story_or_comment_for_user_because(
-      0, @story.id, nil, @user.id, nil
+      0, current_story.id, nil, @user.id, nil
     )
 
     render plain: "ok"
   end
 
   def upvote
-    if !(@story = find_story) || @story.is_gone?
+    if current_story_missing?
       return render plain: "can't find story", status: 400
     end
 
@@ -272,7 +272,7 @@ class StoriesController < ApplicationController
   end
 
   def flag
-    if !(@story = find_story) || @story.is_gone?
+    if current_story_missing?
       return render plain: "can't find story", status: 400
     end
 
@@ -280,23 +280,23 @@ class StoriesController < ApplicationController
       return render plain: "invalid reason", status: 400
     end
 
-    if !@user.can_flag?(@story)
+    if !@user.can_flag?(current_story)
       return render plain: "not permitted to flag", status: 400
     end
 
     Vote.vote_thusly_on_story_or_comment_for_user_because(
-      -1, @story.id, nil, @user.id, params[:reason]
+      -1, current_story.id, nil, @user.id, params[:reason]
     )
-    HiddenStory.hide_story_for_user(@story, @user)
+    HiddenStory.hide_story_for_user(current_story, @user)
 
     render plain: "ok"
   end
 
   def hide
     error =
-      if !(story = find_story)
+      if current_story.nil?
         "Can't find story"
-      elsif story.merged_into_story
+      elsif current_story.merged_into_story
         "Story has been merged"
       end
 
@@ -313,21 +313,21 @@ class StoriesController < ApplicationController
       return
     end
 
-    HiddenStory.hide_story_for_user(story, @user)
+    HiddenStory.hide_story_for_user(current_story, @user)
 
     respond_to do |format|
       format.html {
         flash[:success] = "Story hidden."
-        redirect_back_or_to Routes.title_path(story)
+        redirect_back_or_to Routes.title_path(current_story)
       }
       format.json {
-        render json: {hidden: true, nextAction: story_unhide_path(story.short_id)}, status: :ok
+        render json: {hidden: true, nextAction: story_unhide_path(current_story.short_id)}, status: :ok
       }
     end
   end
 
   def unhide
-    if !(story = find_story)
+    unless current_story
       error = "Can't find story"
 
       respond_to do |format|
@@ -342,24 +342,24 @@ class StoriesController < ApplicationController
       return
     end
 
-    HiddenStory.unhide_story_for_user(story, @user)
+    HiddenStory.unhide_story_for_user(current_story, @user)
 
     respond_to do |format|
       format.html {
         flash[:success] = "Story unhidden."
-        redirect_back_or_to Routes.title_path(story)
+        redirect_back_or_to Routes.title_path(current_story)
       }
       format.json {
-        render json: {hidden: false, nextAction: story_hide_path(story.short_id)}, status: :ok
+        render json: {hidden: false, nextAction: story_hide_path(current_story.short_id)}, status: :ok
       }
     end
   end
 
   def save
     error =
-      if !(story = find_story)
+      if current_story.nil?
         "Can't find story"
-      elsif story.merged_into_story
+      elsif current_story.merged_into_story
         "Story has been merged"
       end
 
@@ -376,21 +376,21 @@ class StoriesController < ApplicationController
       return
     end
 
-    SavedStory.save_story_for_user(story.id, @user.id)
+    SavedStory.save_story_for_user(current_story.id, @user.id)
 
     respond_to do |format|
       format.html {
         flash[:success] = "Story saved."
-        redirect_back_or_to Routes.title_path(story)
+        redirect_back_or_to Routes.title_path(current_story)
       }
       format.json {
-        render json: {saved: true, nextAction: story_unsave_path(story.short_id)}, status: :ok
+        render json: {saved: true, nextAction: story_unsave_path(current_story.short_id)}, status: :ok
       }
     end
   end
 
   def unsave
-    if !(story = find_story)
+    unless current_story
       error = "Can't find story."
 
       respond_to do |format|
@@ -405,15 +405,15 @@ class StoriesController < ApplicationController
       return
     end
 
-    SavedStory.where(user_id: @user.id, story_id: story.id).delete_all
+    SavedStory.where(user_id: @user.id, story_id: current_story.id).delete_all
 
     respond_to do |format|
       format.html {
         flash[:success] = "Story unsaved."
-        redirect_back_or_to Routes.title_path(story)
+        redirect_back_or_to Routes.title_path(current_story)
       }
       format.json {
-        render json: {saved: false, nextAction: story_save_path(story.short_id)}, status: :ok
+        render json: {saved: false, nextAction: story_save_path(current_story.short_id)}, status: :ok
       }
     end
   end
@@ -443,13 +443,13 @@ class StoriesController < ApplicationController
   end
 
   def disown
-    if !((story = find_story) && story.disownable_by_user?(@user))
+    unless current_story&.disownable_by_user?(@user)
       return render plain: "can't find story", status: 400
     end
 
-    InactiveUser.disown! story
+    InactiveUser.disown! current_story
 
-    redirect_to Routes.title_path story
+    redirect_to Routes.title_path current_story
   end
 
   private
